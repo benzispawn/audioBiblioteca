@@ -1,9 +1,9 @@
-window.AudioBiblioteca = (function () {
+window.AudioLib = (function () {
 
-    class AudioBiblioteca {
+    class AudioLib {
 
         constructor ({
-                        idBotao = 'recordButton', 
+                        idButton = 'recordButton', 
                         downloadAuto = false, 
                         mimeType = 'audio/ogg; codecs=opus',
                         sampleRate = 20000, 
@@ -11,7 +11,7 @@ window.AudioBiblioteca = (function () {
                         channel = 1
                     } = {}) {
             
-            this._idBotao = idBotao;
+            this._idButton = idButton;
             this._downloadAuto = downloadAuto;
             this._recorder = null;
             this._gumStream = null;
@@ -19,10 +19,18 @@ window.AudioBiblioteca = (function () {
             this._blobM = null;
             this._devices = [];
             this._mimeType = mimeType;
+            this._encodeMimeType = mimeType;
             this._sampleRate = sampleRate;
             this._sampleSize = sampleSize;
             this._channel = channel;
             this._buffer = null;
+            this._resEncoder = {};
+        }
+
+        static _generateUUID () {
+            return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+            );
         }
 
         static _hasAudio() {
@@ -33,7 +41,7 @@ window.AudioBiblioteca = (function () {
                     .catch(() => false);
         }
 
-        downloadArquivo = (function () {
+        downloadFile = (function () {
             let a = document.createElement('a');
             document.body.appendChild(a);
             a.style = 'display: none;'
@@ -57,23 +65,26 @@ window.AudioBiblioteca = (function () {
                 console.log(this, "this")
                 console.log(this._blobM)
 
-                this.blobM = new Blob([buffer], {type: this._mimeType});
+                this._blobM = new Blob([buffer], {type: this._mimeType});
+                this._blobM.name = `audio_${AudioLib._generateUUID()}.${this._mimeType.split('/')[1].replace('; codecs=opus', '')}`;
+                this._blobM.lastModifiedDate = new Date();
 
                 // PROCESSO NORMAL PARA ALOCAR O AUDIO NA TELA -- TEMPORÁRIO
-                var url = URL.createObjectURL(this.blobM);
+                var url = URL.createObjectURL(this._blobM);
                 var preview = document.createElement('audio');
                 preview.controls = true;
                 console.log(url,"url de resultado")
                 preview.src = url;
                 document.body.appendChild(preview);
                 if (this._downloadAuto) {
-                    this.downloadArquivo(url);
+                    this.downloadFile(url, this._blobM.name);
                 }
 
             }
 
             dataObj.data.arrayBuffer()
                 .then(bufferInterno.bind(this))
+                .catch(AudioLib._errorMessage);
 
             
         }
@@ -83,20 +94,40 @@ window.AudioBiblioteca = (function () {
          * @param {String} url 
          */
 
-        static chamadaURLToBlob (url) {
+        static _fetchURLToBlob (url, _self) {
 
-            const alocaPosChamada = function (b) {
+            const setPostCall = function (b) {
                 this._blobM = b;
-            }
-
-            const chamadaPreparo = function (data) {
-                console.log(data, "data dentro da chamadaPreparo")
-                data.blob(alocaPosChamada.bind(this));
+                b.arrayBuffer()
+                    .then(AudioLib._bufferAction.bind(_self))
+                    .catch(AudioLib._errorMessage);
             }
 
             fetch(url)
-                .then(chamadaPreparo.bind(this))
-                .catch(AudioBiblioteca.errorMensagem.bind(error.name, error.message));
+                .then(res => res.blob())
+                .then(setPostCall.bind(_self))
+                .catch(AudioLib._errorMessage);
+        }
+
+        static _bufferAction (buffer) {
+            console.log(buffer, "dnetro da bufferAcao")
+            console.log(this, "e ai???")
+            console.log(this._encodeMimeType, "mime encoder")
+
+            this._blobM = new Blob([buffer], {type: this._encodeMimeType});
+            this._blobM.name = `audio_${AudioLib._generateUUID()}.${this._encodeMimeType.split('/')[1].replace('; codecs=opus', '')}`;
+            this._blobM.lastModifiedDate = new Date();
+            var url = URL.createObjectURL(this._blobM);
+
+            if (this._downloadAuto) {
+                this.downloadFile(url);
+            }
+
+            this._resEncoder = {
+                blob: this._blobM,
+                url: url
+            }
+           
         }
 
         /**
@@ -107,40 +138,41 @@ window.AudioBiblioteca = (function () {
 
         acaoEncoder (file, mimeType) {
 
-            const regUrl = /[http|https]:\/\/(.*)/g;            
-            console.log(file, "primeiro a chegar")
+            console.log(file, "olha ai")
+
+            this._encodeMimeType = mimeType;
+
+            const regUrl = /[http|https]:\/\/(.*)/g;    
+
+            if (!(file instanceof Blob || 
+                  regUrl.test(file) ||
+                  file instanceof Element)) {
+                //
+                AudioLib._errorMessage('Error', 'O formato inserido não é valido...');
+            }
+
+                    
             // CREATE BLOB FOR URL
             if (regUrl.test(file)) {
-                console.log('dentro do if de url')
-                AudioBiblioteca.chamadaURLToBlob(file);
+                AudioLib._fetchURLToBlob(file, this);
             }
 
             // CHECK IF IT'S A INSTANCE OF BLOB
             if (file instanceof Blob) {
                 file.arrayBuffer()
-                    .then((buffer) => {
-                        this.blobM = new Blob([buffer], {type: mimeType});
-                        var url = URL.createObjectURL(this.blobM);
-    
-                        if (this._downloadAuto) {
-                            this.downloadArquivo(url);
-                        }
-    
-                        return {
-                            blob: this._blobM,
-                            url: url
-                        }
-                    })
-                    .catch(AudioBiblioteca.errorMensagem.bind(error.name, error.message));
+                    .then(AudioLib._bufferAction.bind(this))
+                    .catch(AudioLib._errorMessage);
             }
 
             if (file instanceof Element) {
                 const url = file.src;
 
-                if (url) {
+                if (regUrl.test(url)) {
                     console.log(url);
+                    AudioLib._fetchURLToBlob(url, this);
                 }
             }
+
         }
 
         /**
@@ -148,7 +180,7 @@ window.AudioBiblioteca = (function () {
          * @param {Object} stream 
          */
 
-        static _acaoGravacao (stream) {
+        static _recordAction (stream) {
             // MIMES ACEITOS
             // const mime = ['audio/wav', 'audio/mpeg-3', 'audio/webm', 'audio/ogg; codecs=opus']
             //     .filter(MediaRecorder.isTypeSupported);
@@ -157,12 +189,12 @@ window.AudioBiblioteca = (function () {
             this._recorder = new MediaRecorder(stream);
             console.log("stream recorder", this._recorder)
             // TRABALHO COM BUFFER PARA TROCAR O TYPE
-            this._recorder.ondataavailable = AudioBiblioteca._acaoBuffer.bind(this);
+            this._recorder.ondataavailable = AudioLib._acaoBuffer.bind(this);
             // COMEÇA A GRAVAÇÃO
             this._recorder.start();
         }
 
-        static _condicaoGravacao () {
+        static _recordCondition () {
             // PARA DE GRAVAR
             if (this._recorder && this._recorder.state == "recording") {
 
@@ -177,41 +209,50 @@ window.AudioBiblioteca = (function () {
                         sampleRate: this._sampleRate,
                         channelCount: this._channel,
                     }
-                }).then(AudioBiblioteca._acaoGravacao.bind(this))
-                  .catch(AudioBiblioteca.errorMensagem.bind(this));
+                }).then(AudioLib._recordAction.bind(this))
+                  .catch(AudioLib._errorMessage.bind(this));
             }
+        }
+
+        get isRecording () {
+            return this._recorder.state === 'recording';
         }
 
         gravacao () {
             // TEM DEVICES
-            AudioBiblioteca._hasAudio()
-                .then(AudioBiblioteca._condicaoGravacao.bind(this))
-                .catch(AudioBiblioteca.errorMensagem.bind({
+            AudioLib._hasAudio()
+                .then(AudioLib._recordCondition.bind(this))
+                .catch(AudioLib._errorMessage.bind({
                     name: 'Não encontrou dispositivos de audio',
                     message: 'Por favor, veja se o seu dispositivo de audio está funcionando normalmente'
                 }))
             
         }
 
-        addAcaoBotao () {
+        addButton () {
 
-            this._recordButton = document.getElementById(this._idBotao);
+            this._recordButton = document.getElementById(this._idButton);
 
-            if (!document.getElementById(this._idBotao)) {
-                this.errorMensagem('Não foi escolhido o id do botão ou o mesmo é inesxistente...', 'Procure criar o objeto com um id para html válido!')
+            if (!document.getElementById(this._idButton)) {
+                this._errorMessage('Não foi escolhido o id do botão ou o mesmo é inesxistente...', 'Procure criar o objeto com um id para html válido!')
             }
             this._recordButton.addEventListener("click", this.gravacao.bind(this));
            
         }
 
-        static errorMensagem (error) {
+        /**
+         * 
+         * @param {Object} error 
+         */
+
+        static _errorMessage (error) {
             throw new Error(`${error.name} : \n ${error.message}`);
         }
 
 
     }
 
-    return AudioBiblioteca;
+    return AudioLib;
 
 })();
 
