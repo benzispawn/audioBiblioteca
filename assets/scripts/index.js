@@ -30,11 +30,6 @@ window.AudioBiblioteca = (function () {
             
             return navigator.mediaDevices.enumerateDevices()
                     .then(devices => devices.some(device => device.kind === 'audioinput'))
-                    // .then((devices) => {
-                    //     //this._devices = devices.filter(e => e.kind === 'audioinput');
-                    //     //this._hasDevices = devices.some((device) => device.kind === 'audioinput')
-                    //     devices.some((device) => device.kind === 'audioinput');
-                    // })
                     .catch(() => false);
         }
 
@@ -42,9 +37,7 @@ window.AudioBiblioteca = (function () {
             let a = document.createElement('a');
             document.body.appendChild(a);
             a.style = 'display: none;'
-            /**
-             * 
-             */
+            
             return function (url, nomeArquivo = 'audio.mp3') {
                 a.href = url;
                 a.download = nomeArquivo;
@@ -70,6 +63,7 @@ window.AudioBiblioteca = (function () {
                 var url = URL.createObjectURL(this.blobM);
                 var preview = document.createElement('audio');
                 preview.controls = true;
+                console.log(url,"url de resultado")
                 preview.src = url;
                 document.body.appendChild(preview);
                 if (this._downloadAuto) {
@@ -81,34 +75,72 @@ window.AudioBiblioteca = (function () {
             dataObj.data.arrayBuffer()
                 .then(bufferInterno.bind(this))
 
-            // if ('audio/ogg; codecs=opus' !== this._mimeType && 'audio/ogg' !== this._mimeType) {
-            //     console.log('entrou na condição')
-            //     dataObj.data.arrayBuffer(bufferInterno.bind(this));
-            // }
             
         }
 
         /**
          * 
-         * @param {Object} blob 
+         * @param {String} url 
          */
 
-        acaoEncoder (blob, mimeType) {
-            blob.arrayBuffer()
-                .then((buffer) => {
-                    this.blobM = new Blob([buffer], {type: mimeType});
-                    var url = URL.createObjectURL(this.blobM);
+        static chamadaURLToBlob (url) {
 
-                    if (this._downloadAuto) {
-                        this.downloadArquivo(url);
-                    }
+            const alocaPosChamada = function (b) {
+                this._blobM = b;
+            }
 
-                    return {
-                        blob: this._blobM,
-                        url: url
-                    }
-                })
+            const chamadaPreparo = function (data) {
+                console.log(data, "data dentro da chamadaPreparo")
+                data.blob(alocaPosChamada.bind(this));
+            }
+
+            fetch(url)
+                .then(chamadaPreparo.bind(this))
                 .catch(AudioBiblioteca.errorMensagem.bind(error.name, error.message));
+        }
+
+        /**
+         * 
+         * @param {Object} blob 
+         * @param {String} mimeType
+         */
+
+        acaoEncoder (file, mimeType) {
+
+            const regUrl = /[http|https]:\/\/(.*)/g;            
+            console.log(file, "primeiro a chegar")
+            // CREATE BLOB FOR URL
+            if (regUrl.test(file)) {
+                console.log('dentro do if de url')
+                AudioBiblioteca.chamadaURLToBlob(file);
+            }
+
+            // CHECK IF IT'S A INSTANCE OF BLOB
+            if (file instanceof Blob) {
+                file.arrayBuffer()
+                    .then((buffer) => {
+                        this.blobM = new Blob([buffer], {type: mimeType});
+                        var url = URL.createObjectURL(this.blobM);
+    
+                        if (this._downloadAuto) {
+                            this.downloadArquivo(url);
+                        }
+    
+                        return {
+                            blob: this._blobM,
+                            url: url
+                        }
+                    })
+                    .catch(AudioBiblioteca.errorMensagem.bind(error.name, error.message));
+            }
+
+            if (file instanceof Element) {
+                const url = file.src;
+
+                if (url) {
+                    console.log(url);
+                }
+            }
         }
 
         /**
@@ -118,9 +150,9 @@ window.AudioBiblioteca = (function () {
 
         static _acaoGravacao (stream) {
             // MIMES ACEITOS
-            const mime = ['audio/wav', 'audio/mpeg-3', 'audio/webm', 'audio/ogg; codecs=opus']
-                .filter(MediaRecorder.isTypeSupported);
-            console.log("mime aceitos", mime);
+            // const mime = ['audio/wav', 'audio/mpeg-3', 'audio/webm', 'audio/ogg; codecs=opus']
+            //     .filter(MediaRecorder.isTypeSupported);
+            // console.log("mime aceitos", mime);
             this._gumStream = stream;
             this._recorder = new MediaRecorder(stream);
             console.log("stream recorder", this._recorder)
