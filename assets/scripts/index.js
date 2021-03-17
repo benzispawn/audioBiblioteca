@@ -2,6 +2,24 @@ window.AudioLib = (function () {
 
     class AudioLib {
 
+        /**
+         * 
+         * 
+         * 
+         * Here you can change some params as:
+         *      @param {Number} sampleRate -> as default 20Hz
+         *      @param {Number} sampleSize -> as default 16 bits
+         *      @param {String} idButton -> as default recordButton but you can change for an id of you taste
+         *      @param {Number} channel -> default 1
+         *      @param {String} mimeType -> default as .ogg but you can change to other formats
+         *      @param {Boolean} downloadAuto -> with you want to download automaticaly, default is false
+         *      @var {Object} _recorder -> here we have the object with the values of the record
+         *      @var {Object} _blobM -> The result blob
+         *      @var {Object} _gumStream ->Your generated stream
+         *      @var {String} _encodeMimeType -> mimeType for use in the @function changeType
+         *      @var {Object} _resChangedType -> Object generated in the @function changeType
+         */
+
         constructor ({
                         idButton = 'recordButton', 
                         downloadAuto = false, 
@@ -23,16 +41,19 @@ window.AudioLib = (function () {
             this._sampleRate = sampleRate;
             this._sampleSize = sampleSize;
             this._channel = channel;
-            this._buffer = null;
-            this._resEncoder = {};
+            this._resChangedType = {};
         }
-
+        /**
+         * @function _generateUUID
+         * @returns 
+         * To generate a UUID for the name of files
+         */
         static _generateUUID () {
             return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
                 (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
             );
         }
-
+        // Has any audio here???
         static _hasAudio() {
             if (!navigator.mediaDevices) return Promise.resolve(false);
             
@@ -40,6 +61,10 @@ window.AudioLib = (function () {
                     .then(devices => devices.some(device => device.kind === 'audioinput'))
                     .catch(() => false);
         }
+
+        /**
+         * Download a file automaticaly as the record finishes
+         */
 
         downloadFile = (function () {
             let a = document.createElement('a');
@@ -56,8 +81,10 @@ window.AudioLib = (function () {
         /**
          * 
          * @param {Object} buffer 
+         * 
+         * Same as _bufferAction, maybe delete in a near future
          */
-        static _acaoBuffer (dataObj) {
+        static _actionBuffer (dataObj) {
             this._blobM = dataObj.data;
             // FUNÇÃO PARA TRANFORMAR EM OUTRO FORMATO
             function bufferInterno (buffer) {
@@ -92,6 +119,8 @@ window.AudioLib = (function () {
         /**
          * 
          * @param {String} url 
+         * 
+         * For the use of a Url
          */
 
         static _fetchURLToBlob (url, _self) {
@@ -108,7 +137,11 @@ window.AudioLib = (function () {
                 .then(setPostCall.bind(_self))
                 .catch(AudioLib._errorMessage);
         }
-
+        /**
+         * 
+         * @param {*} buffer 
+         * Receives a buffer to transform into a new one with a different type
+         */
         static _bufferAction (buffer) {
             console.log(buffer, "dnetro da bufferAcao")
             console.log(this, "e ai???")
@@ -123,20 +156,23 @@ window.AudioLib = (function () {
                 this.downloadFile(url);
             }
 
-            this._resEncoder = {
+            this._resChangedType = {
                 blob: this._blobM,
                 url: url
             }
-           
+
         }
 
         /**
          * 
          * @param {Object} blob 
          * @param {String} mimeType
+         * 
+         * Extra function to be use in a blob or audio Element or 
+         * a url blob to extract a new blob in a new format
          */
 
-        acaoEncoder (file, mimeType) {
+        changeType (file, mimeType) {
 
             console.log(file, "olha ai")
 
@@ -148,7 +184,7 @@ window.AudioLib = (function () {
                   regUrl.test(file) ||
                   file instanceof Element)) {
                 //
-                AudioLib._errorMessage('Error', 'O formato inserido não é valido...');
+                AudioLib._errorMessage('Error', 'The type are trying to use is invalid...');
             }
 
                     
@@ -178,6 +214,9 @@ window.AudioLib = (function () {
         /**
          * 
          * @param {Object} stream 
+         * 
+         * Pass the stream as parameter than to transform into a buffer and get the blob
+         * on the type you want
          */
 
         static _recordAction (stream) {
@@ -189,13 +228,17 @@ window.AudioLib = (function () {
             this._recorder = new MediaRecorder(stream);
             console.log("stream recorder", this._recorder)
             // TRABALHO COM BUFFER PARA TROCAR O TYPE
-            this._recorder.ondataavailable = AudioLib._acaoBuffer.bind(this);
+            this._recorder.ondataavailable = AudioLib._actionBuffer.bind(this);
+            // EXIT FROM A ERROR
+            this._recorder.onerror = AudioLib._errorMessage;
             // COMEÇA A GRAVAÇÃO
             this._recorder.start();
         }
-
+        /**
+         * Condition for enable record or stop it
+         */
         static _recordCondition () {
-            // PARA DE GRAVAR
+            // Good to go
             if (this._recorder && this._recorder.state == "recording") {
 
                 this._recorder.stop();
@@ -213,36 +256,47 @@ window.AudioLib = (function () {
                   .catch(AudioLib._errorMessage.bind(this));
             }
         }
-
+        /**
+         * To see if is recording or no
+         */
         get isRecording () {
             return this._recorder.state === 'recording';
         }
 
-        gravacao () {
-            // TEM DEVICES
+        /**
+         * Start recording the audio
+         */
+        record () {
+            // HAS DEVICES
             AudioLib._hasAudio()
                 .then(AudioLib._recordCondition.bind(this))
                 .catch(AudioLib._errorMessage.bind({
-                    name: 'Não encontrou dispositivos de audio',
-                    message: 'Por favor, veja se o seu dispositivo de audio está funcionando normalmente'
+                    name: 'No devices found',
+                    message: 'See if your device is working properly...'
                 }))
             
         }
+
+        /**
+         * The functio add an event in button of your choice
+         */
 
         addButton () {
 
             this._recordButton = document.getElementById(this._idButton);
 
             if (!document.getElementById(this._idButton)) {
-                this._errorMessage('Não foi escolhido o id do botão ou o mesmo é inesxistente...', 'Procure criar o objeto com um id para html válido!')
+                this._errorMessage('Element is inexistent', 'Change the id of your element or see if exists.')
             }
-            this._recordButton.addEventListener("click", this.gravacao.bind(this));
+            this._recordButton.addEventListener("click", this.record.bind(this));
            
         }
 
         /**
          * 
          * @param {Object} error 
+         * 
+         * Return a error message in the console
          */
 
         static _errorMessage (error) {
@@ -257,3 +311,84 @@ window.AudioLib = (function () {
 })();
 
 
+
+/**
+const waveEncoder = () => {
+    let BYTES_PER_SAMPLE = 2
+  
+    let recorded = []
+  
+    function encode (buffer) {
+      let length = buffer.length
+      let data = new Uint8Array(length * BYTES_PER_SAMPLE)
+      for (let i = 0; i < length; i++) {
+        let index = i * BYTES_PER_SAMPLE
+        let sample = buffer[i]
+        if (sample > 1) {
+          sample = 1
+        } else if (sample < -1) {
+          sample = -1
+        }
+        sample = sample * 32768
+        data[index] = sample
+        data[index + 1] = sample >> 8
+      }
+      recorded.push(data)
+    }
+  
+    function dump (sampleRate) {
+      let bufferLength = recorded.length ? recorded[0].length : 0
+      let length = recorded.length * bufferLength
+      let wav = new Uint8Array(44 + length)
+      let view = new DataView(wav.buffer)
+  
+      // RIFF identifier 'RIFF'
+      view.setUint32(0, 1380533830, false)
+      // file length minus RIFF identifier length and file description length
+      view.setUint32(4, 36 + length, true)
+      // RIFF type 'WAVE'
+      view.setUint32(8, 1463899717, false)
+      // format chunk identifier 'fmt '
+      view.setUint32(12, 1718449184, false)
+      // format chunk length
+      view.setUint32(16, 16, true)
+      // sample format (raw)
+      view.setUint16(20, 1, true)
+      // channel count
+      view.setUint16(22, 1, true)
+      // sample rate
+      view.setUint32(24, sampleRate, true)
+      // byte rate (sample rate * block align)
+      view.setUint32(28, sampleRate * BYTES_PER_SAMPLE, true)
+      // block align (channel count * bytes per sample)
+      view.setUint16(32, BYTES_PER_SAMPLE, true)
+      // bits per sample
+      view.setUint16(34, 8 * BYTES_PER_SAMPLE, true)
+      // data chunk identifier 'data'
+      view.setUint32(36, 1684108385, false)
+      // data chunk length
+      view.setUint32(40, length, true)
+  
+      // eslint-disable-next-line unicorn/no-for-loop
+      for (let i = 0; i < recorded.length; i++) {
+        wav.set(recorded[i], i * bufferLength + 44)
+      }
+  
+      recorded = []
+      postMessage(wav.buffer, [wav.buffer])
+    }
+  
+    onmessage = e => {
+      if (e.data[0] === 'encode') {
+        encode(e.data[1])
+      } else if (e.data[0] === 'dump') {
+        dump(e.data[1])
+      }
+    }
+  }
+  
+ * 
+ * 
+ */
+
+ 
